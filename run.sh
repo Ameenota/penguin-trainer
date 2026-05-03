@@ -4,7 +4,7 @@ zip -r trainer.zip . -x "*.DS_Store" ".git/*"
 gcloud storage cp trainer.zip gs://pipelines1341/trainer.zip
 
 gcloud ai custom-jobs create \
-  --display-name=penguin-trainer-v7 \
+  --display-name=penguin-trainer-v8 \
   --region=us-central1 \
   --project=conspiracy-493120 \
   --service-account=myservice@conspiracy-493120.iam.gserviceaccount.com \

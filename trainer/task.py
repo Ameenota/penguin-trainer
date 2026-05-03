@@ -101,9 +101,10 @@ def train_and_register():
         )
         logger.info(f"Model registered: {model_uploaded.resource_name}")
         
-        # Reverted back to your original log_model usage
-        aiplatform.log_model(model, "penguin-classifier-model")
-        logger.info("Metadata link to experiment created successfully.")
+        # Generate a unique name for the metadata artifact to avoid 409 AlreadyExists error
+        artifact_name = f"penguin-model-{timestamp}"
+        aiplatform.log_model(model, artifact_name)
+        logger.info(f"Metadata artifact '{artifact_name}' linked to experiment successfully.")
         
 
 if __name__ == "__main__":
