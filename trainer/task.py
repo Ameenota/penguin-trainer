@@ -53,7 +53,8 @@ def train_and_register():
     timestamp = datetime.now().strftime("%Y%m%d-%H%M")
     run_name = f"xgboost-penguin-run-{timestamp}"
     
-    with aiplatform.start_run(run_name):
+    # We capture the 'run' object here to use it for explicit lineage logging
+    with aiplatform.start_run(run_name) as run:
         logger.info(f"Starting experiment run: {run_name}")
         
         # Log basic metadata
@@ -70,17 +71,11 @@ def train_and_register():
         predictions = model.predict(X_test)
         report = classification_report(y_test, predictions, target_names=labels, output_dict=True)
         
-        # Log key metrics to dashboard
+        # Log key metrics
         aiplatform.log_metrics({
             "accuracy": report["accuracy"],
             "macro_avg_f1": report["macro avg"]["f1-score"],
-            "weighted_avg_precision": report["weighted avg"]["precision"],
-            "weighted_avg_recall": report["weighted avg"]["recall"]
         })
-        
-        # Log Confusion Matrix as a string artifact
-        cm = confusion_matrix(y_test, predictions)
-        aiplatform.log_metrics({"confusion_matrix": str(cm.tolist())})
 
         # 4. Save and Upload Model Artifact
         local_model_path = "model.bst"
@@ -88,24 +83,28 @@ def train_and_register():
         upload_to_gcs(local_model_path, BUCKET_NAME, "models/model.bst")
 
         # 5. Register Model in Registry with Versioning
-        logger.info(f"Registering new version to Model ID: {TARGET_MODEL_ID}")
-        
-        # Construct the full parent model path
         parent_model_path = f"projects/{PROJECT_ID}/locations/{REGION}/models/{TARGET_MODEL_ID}"
 
         model_uploaded = aiplatform.Model.upload(
             display_name=MODEL_DISPLAY_NAME,
             artifact_uri=f"gs://{BUCKET_NAME}/models/",
             serving_container_image_uri="us-docker.pkg.dev/vertex-ai/prediction/xgboost-cpu.2-1:latest",
-            parent_model=parent_model_path # Added for versioning
+            parent_model=parent_model_path 
         )
-        logger.info(f"Model registered: {model_uploaded.resource_name}")
         
-        # Generate a unique name for the metadata artifact to avoid 409 AlreadyExists error
+        # 6. EXPLICIT LINEAGE LINKING
+        # Fixed positional argument for the model object per SDK docs
         artifact_name = f"penguin-model-{timestamp}"
-        aiplatform.log_model(model, artifact_name)
-        logger.info(f"Metadata artifact '{artifact_name}' linked to experiment successfully.")
         
+        run.log_model(
+            model,
+            display_name=artifact_name,
+            # Linking the Experiment Artifact to the Registry Model Resource
+            uri=model_uploaded.uri 
+        )
+        
+        aiplatform.log_params({"model_artifact_name": artifact_name})
+        logger.info(f"Model and Lineage logged successfully for {artifact_name}")
 
 if __name__ == "__main__":
     train_and_register()
