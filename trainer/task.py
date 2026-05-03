@@ -7,6 +7,7 @@ from google.cloud import storage
 from datetime import datetime
 import logging
 import os
+import json
 
 # Configure logging for Cloud Logging compatibility
 logging.basicConfig(level=logging.INFO)
@@ -59,7 +60,14 @@ def train_and_register():
         
         # Log basic metadata
         aiplatform.log_metrics({"xgboost_version": xgb.__version__})
-        params = {"n_estimators": 150, "max_depth": 5, "learning_rate": 0.05}
+        
+        # UPDATED SETTINGS: Increasing depth and learning rate to see a change in metrics
+        params = {
+            "n_estimators": 200, 
+            "max_depth": 7, 
+            "learning_rate": 0.1,
+            "subsample": 0.8
+        }
         aiplatform.log_params(params)
         
         # Train Model
@@ -71,11 +79,25 @@ def train_and_register():
         predictions = model.predict(X_test)
         report = classification_report(y_test, predictions, target_names=labels, output_dict=True)
         
-        # Log key metrics
+        # Log key metrics (Scalar metrics for the Compare table)
         aiplatform.log_metrics({
             "accuracy": report["accuracy"],
             "macro_avg_f1": report["macro avg"]["f1-score"],
+            "weighted_avg_precision": report["weighted avg"]["precision"],
+            "weighted_avg_recall": report["weighted avg"]["recall"]
         })
+
+        # LOGGING THE FULL CLASSIFICATION REPORT AS AN ARTIFACT
+        report_filename = f"classification_report_{timestamp}.json"
+        with open(report_filename, "w") as f:
+            json.dump(report, f)
+        
+        # This will show up in the Metadata Lineage and Artifacts tab
+        aiplatform.log_metrics({"classification_report_json": str(report)})
+        
+        # Log Confusion Matrix as a string artifact
+        cm = confusion_matrix(y_test, predictions)
+        aiplatform.log_metrics({"confusion_matrix": str(cm.tolist())})
 
         # 4. Save and Upload Model Artifact
         local_model_path = "model.bst"
@@ -93,7 +115,6 @@ def train_and_register():
         )
         
         # 6. EXPLICIT LINEAGE LINKING
-        # Fixed positional argument for the model object per SDK docs
         artifact_name = f"penguin-model-{timestamp}"
         
         run.log_model(
