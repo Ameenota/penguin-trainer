@@ -1,6 +1,6 @@
 
 rm trainer.zip
-zip -r trainer.zip . -x "*.DS_Store"
+zip -r trainer.zip . -x "*.DS_Store" ".git/*"
 gcloud storage cp trainer.zip gs://pipelines1341/trainer.zip
 
 gcloud ai custom-jobs create \

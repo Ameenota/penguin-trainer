@@ -15,7 +15,10 @@ logger = logging.getLogger(__name__)
 # Constants
 BUCKET_NAME = "pipelines1341"
 PROJECT_ID = "conspiracy-493120"
+REGION = "us-central1"
 MODEL_DISPLAY_NAME = "penguin-classifier"
+# The specific Model Resource ID to use for versioning
+TARGET_MODEL_ID = "2914109334373793792"
 
 def upload_to_gcs(local_path, bucket_name, gcs_path):
     """Uploads a file to Google Cloud Storage."""
@@ -31,7 +34,7 @@ def upload_to_gcs(local_path, bucket_name, gcs_path):
 
 def train_and_register():
     # 1. Initialize Vertex AI
-    aiplatform.init(experiment="penguin-classification-exp", project=PROJECT_ID)
+    aiplatform.init(experiment="penguin-classification-exp", project=PROJECT_ID, location=REGION)
 
     # 2. Load Data from BigQuery
     logger.info("Fetching data from BigQuery...")
@@ -84,15 +87,21 @@ def train_and_register():
         model.save_model(local_model_path)
         upload_to_gcs(local_model_path, BUCKET_NAME, "models/model.bst")
 
-        # 5. Register Model in Registry
-        logger.info("Registering model to Vertex AI Model Registry...")
+        # 5. Register Model in Registry with Versioning
+        logger.info(f"Registering new version to Model ID: {TARGET_MODEL_ID}")
+        
+        # Construct the full parent model path
+        parent_model_path = f"projects/{PROJECT_ID}/locations/{REGION}/models/{TARGET_MODEL_ID}"
+
         model_uploaded = aiplatform.Model.upload(
             display_name=MODEL_DISPLAY_NAME,
             artifact_uri=f"gs://{BUCKET_NAME}/models/",
-            serving_container_image_uri="us-docker.pkg.dev/vertex-ai/prediction/xgboost-cpu.2-1:latest"
+            serving_container_image_uri="us-docker.pkg.dev/vertex-ai/prediction/xgboost-cpu.2-1:latest",
+            parent_model=parent_model_path # Added for versioning
         )
         logger.info(f"Model registered: {model_uploaded.resource_name}")
         
+        # Reverted back to your original log_model usage
         aiplatform.log_model(model, "penguin-classifier-model")
         logger.info("Metadata link to experiment created successfully.")
         
